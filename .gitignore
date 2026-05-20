@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.DS_Store
+yolov8n.pt
+*.egg-info/
+venv/
+.env
+*.log
+koala_sheet.png
+koala_idle.svg
+IMPROVEMENTS.md
+.claude/
+gripper.ino

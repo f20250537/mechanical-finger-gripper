@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Koala Grip Control</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #080808;
+      --s1: #0e0e0e;
+      --border: #1a1a1a;
+      --text: #d0ccc4;
+      --muted: #555;
+      --dim: #2e2e2e;
+      --green: #1aff8c;
+      --amber: #f5c518;
+      --red: #ff4444;
+      --blue: #4fc3f7;
+      --orange: #ff9800;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+
+    body { overflow: hidden; }
+
+    #app {
+      display: grid;
+      grid-template-rows: 38px 1fr 32px;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      background: var(--s1);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-title {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+    }
+
+    .topbar-status {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      font-size: 10px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ff9800;
+      box-shadow: 0 0 4px currentColor;
+    }
+
+    .status-dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* MAIN GRID */
+    .main {
+      display: grid;
+      grid-template-columns: 44% 56%;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* LEFT: CAMERA PANEL */
+    .panel-camera {
+      background: var(--s1);
+      border-right: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #cam-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    #cam-pending {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .cam-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .cam-corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: var(--green);
+      opacity: 0.2;
+    }
+
+    .cam-corner.tl { top: 12px; left: 12px; border-top: 1px solid; border-left: 1px solid; }
+    .cam-corner.tr { top: 12px; right: 12px; border-top: 1px solid; border-right: 1px solid; }
+    .cam-corner.bl { bottom: 12px; left: 12px; border-bottom: 1px solid; border-left: 1px solid; }
+    .cam-corner.br { bottom: 12px; right: 12px; border-bottom: 1px solid; border-right: 1px solid; }
+
+    .cam-scanline {
+      position: absolute;
+      left: 0; right: 0; top: -5%;
+      height: 30px;
+      background: linear-gradient(180deg, transparent, rgba(26,255,140,0.06), transparent);
+      animation: scan 8s linear infinite;
+      opacity: 0.5;
+    }
+
+    @keyframes scan { to { top: 105%; } }
+
+    .cam-label {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(8,8,8,0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 4px 6px;
+      font-size: 9px;
+      color: #aaa;
+    }
+
+    .cam-status {
+      position: absolute;
+      top: 12px; right: 12px;
+      background: rgba(8,8,8,0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 4px 8px;
+      font-size: 9px;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    #frame-num { font-weight: 600; }
+    #cam-mode { color: #888; }
+
+    .cam-info {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(180deg, transparent, rgba(8,8,8,0.9));
+      padding: 32px 16px 16px;
+      pointer-events: none;
+    }
+
+    #detected-object {
+      font-size: 24px;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+      color: var(--dim);
+      margin-bottom: 4px;
+      transition: color 0.2s;
+    }
+
+    #detected-object.active {
+      color: var(--green);
+    }
+
+    #confidence-text {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    /* CENTER: STATE MACHINE */
+    .panel-state {
+      background: var(--s1);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow-y: auto;
+    }
+
+    .state-display {
+      text-align: center;
+    }
+
+    .state-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--dim);
+      margin: 0 auto 12px;
+      box-shadow: none;
+      transition: background 0.3s;
+    }
+
+    .state-dot.pulse {
+      animation: pulse-dot 0.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot { 50% { box-shadow: 0 0 8px currentColor; } }
+
+    #state-name {
+      font-size: 44px;
+      font-weight: 300;
+      letter-spacing: 0.28em;
+      line-height: 1.1;
+      color: var(--dim);
+      margin-bottom: 16px;
+      transition: color 0.3s, transform 0.3s;
+      animation: state-enter 0.3s ease;
+    }
+
+    @keyframes state-enter { from { opacity: 0; transform: translateY(6px); } }
+
+    #phrase {
+      font-size: 13px;
+      font-style: italic;
+      color: var(--muted);
+      max-width: 280px;
+      margin: 0 auto;
+      line-height: 1.4;
+      transition: opacity 0.3s;
+    }
+
+    .grip-section {
+      margin: 20px 0;
+    }
+
+    .grip-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .grip-bar {
+      height: 2px;
+      background: #141414;
+      overflow: hidden;
+      border-radius: 1px;
+    }
+
+    .grip-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--dim);
+      transition: width 0.8s cubic-bezier(0.4,0,0.2,1), background 0.3s;
+    }
+
+    .timeline-section {
+      margin: 20px 0;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      align-items: start;
+      position: relative;
+      padding: 0 0 20px 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8.33%;
+      right: 8.33%;
+      top: 5px;
+      height: 1px;
+      background: #141414;
+    }
+
+    .timeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      font-size: 0;
+      z-index: 1;
+    }
+
+    .timeline-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #1e1e1e;
+      border: 1px solid #1e1e1e;
+      transition: all 0.2s;
+    }
+
+    .timeline-step.past .timeline-dot {
+      background: #2a2a2a;
+      border-color: #2a2a2a;
+    }
+
+    .timeline-step.active .timeline-dot {
+      width: 9px;
+      height: 9px;
+      border: none;
+    }
+
+    .timeline-label {
+      font-size: 9px;
+      color: #1e1e1e;
+      transition: color 0.2s;
+    }
+
+    .timeline-step.past .timeline-label {
+      color: #333;
+    }
+
+    .timeline-step.active .timeline-label {
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 8px;
+      padding-bottom: 16px;
+    }
+
+    .btn {
+      padding: 10px 0;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #1e1e1e;
+      color: #333;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:hover {
+      color: #777;
+      border-bottom-color: #333;
+    }
+
+    .btn-estop {
+      grid-column: 1 / -1;
+      background: rgba(255,68,68,0.05);
+      border: 1px solid rgba(255,68,68,0.15);
+      border-bottom: none;
+      color: var(--red);
+      padding: 10px;
+      letter-spacing: 0.25em;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .btn-estop:hover {
+      background: rgba(255,68,68,0.09);
+      border-color: rgba(255,68,68,0.2);
+      color: #ff7777;
+    }
+
+    /* STICK FIGURE FIXED OVERLAY */
+    #stick-widget {
+      position: fixed;
+      top: 48px;
+      right: 12px;
+      bottom: auto;
+      width: 100px;
+      height: 145px;
+      background: #0e0e0e;
+      border: 1px solid #1e1e1e;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 6px;
+      z-index: 100;
+    }
+
+    #stick-phrase {
+      position: fixed;
+      top: 200px;
+      right: 12px;
+      bottom: auto;
+      width: 160px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-style: italic;
+      color: #888;
+      background: #0e0e0e;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 7px 10px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+      z-index: 100;
+    }
+
+    #stick-phrase::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+      width: 10px;
+      height: 10px;
+      background: #0e0e0e;
+      border-left: 1px solid #1e1e1e;
+      border-top: 1px solid #1e1e1e;
+    }
+
+    #stick-state-label {
+      font-size: 8px;
+      color: #252525;
+      letter-spacing: 0.18em;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* BOTTOM BAR */
+    .bottombar {
+      background: var(--s1);
+      border-top: 1px solid var(--border);
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+      font-size: 10px;
+      color: var(--dim);
+    }
+
+    #serial-log {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .baud-info {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="topbar-title">MECHANICAL FINGER GRIPPER</div>
+      <div class="topbar-status">
+        <div class="status-dot" id="conn-dot"></div>
+        <span id="conn-label">CONNECTING</span>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+      <!-- LEFT: CAMERA -->
+      <div class="panel-camera">
+        <img id="cam-feed" style="display:none" alt="camera feed">
+        <div id="cam-pending">
+          <div>INITIALIZING CAMERA</div>
+          <div style="font-size:10px;margin-top:8px;color:#333">Looking for USB device...</div>
+        </div>
+        <div class="cam-overlay">
+          <div class="cam-corner tl"></div>
+          <div class="cam-corner tr"></div>
+          <div class="cam-corner bl"></div>
+          <div class="cam-corner br"></div>
+          <div class="cam-scanline"></div>
+          <div class="cam-label">CAM_01</div>
+          <div class="cam-status">
+            <span id="frame-num">FRAME: 00000</span>
+            <span id="cam-mode">SIM</span>
+          </div>
+        </div>
+        <div class="cam-info">
+          <div id="detected-object">NO OBJECT</div>
+          <div id="confidence-text">CONF 0.00 / GRIP 60°</div>
+        </div>
+      </div>
+
+      <!-- CENTER: STATE -->
+      <div class="panel-state">
+        <div class="state-display">
+          <div class="state-dot" id="state-dot"></div>
+          <div id="state-name">IDLE</div>
+          <div id="phrase">Standing by for object.</div>
+        </div>
+
+        <div class="grip-section">
+          <div class="grip-label">
+            <span>GRIP</span>
+            <span id="grip-value">60°</span>
+          </div>
+          <div class="grip-bar">
+            <div class="grip-fill" id="grip-fill"></div>
+          </div>
+        </div>
+
+        <div class="timeline-section">
+          <div class="timeline" id="timeline"></div>
+        </div>
+
+        <div class="controls">
+          <button class="btn" id="btn-open">OPEN</button>
+          <button class="btn" id="btn-close">CLOSE</button>
+          <button class="btn" id="btn-grip">GRIP</button>
+          <button class="btn" id="btn-reset">RESET</button>
+          <button class="btn btn-estop" id="btn-estop">EMERGENCY STOP</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- STICK FIGURE FIXED OVERLAY -->
+    <div id="stick-phrase"></div>
+    <div id="stick-widget">
+      <div id="stick-stage" style="position:relative;width:70px;height:93px;">
+        <svg id="sm" viewBox="0 0 120 160" width="70" height="93"
+             xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block;">
+          <ellipse id="shadow" cx="60" cy="149" rx="18" ry="3" fill="#1a1a1a"/>
+          <g id="guy" style="transform-origin:60px 100px">
+            <line id="s-body" x1="60" y1="66" x2="60" y2="104" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+            <g id="arm-l" style="transform-origin:60px 74px">
+              <line x1="60" y1="74" x2="36" y2="90" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <g id="arm-r" style="transform-origin:60px 74px">
+              <line x1="60" y1="74" x2="84" y2="90" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <g id="leg-l" style="transform-origin:60px 104px">
+              <line x1="60" y1="104" x2="40" y2="132" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+              <line x1="40" y1="132" x2="30" y2="136" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <g id="leg-r" style="transform-origin:60px 104px">
+              <line x1="60" y1="104" x2="80" y2="132" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+              <line x1="80" y1="132" x2="90" y2="136" stroke="#e8e4dc" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <g id="head-group" style="transform-origin:60px 50px">
+              <circle cx="60" cy="50" r="16" fill="#0a0a0a" stroke="#e8e4dc" stroke-width="3"/>
+              <ellipse id="eye-l" cx="54" cy="46" rx="2.5" ry="3" fill="#e8e4dc"/>
+              <ellipse id="eye-r" cx="66" cy="46" rx="2.5" ry="3" fill="#e8e4dc"/>
+              <path id="s-mouth" d="M 53,56 Q 60,62 67,56"
+                stroke="#e8e4dc" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div id="stick-state-label">IDLE</div>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottombar">
+      <div id="serial-log">SERIAL > WAITING FOR CONNECTION</div>
+      <div class="baud-info">
+        <span>9600 BAUD</span>
+        <div class="status-dot" id="serial-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://localhost:8765');
+    let stateColors = {
+      idle: '#444444', detected: '#f5c518', calculating: '#4fc3f7',
+      inserting: '#ff9800', gripping: '#1aff8c', success: '#1aff8c', fail: '#ff4444'
+    };
+
+    const stateNames = ['IDLE', 'DETECTED', 'CALCULATING', 'INSERTING', 'GRIPPING', 'RESULT'];
+    let currentState = 'idle';
+    let currentGripAngle = 65;
+
+    ws.onopen = () => {
+      document.getElementById('conn-dot').classList.add('connected');
+      document.getElementById('conn-label').textContent = 'CONTROL ONLINE';
+    };
+
+    ws.onclose = () => {
+      document.getElementById('conn-dot').classList.remove('connected');
+      document.getElementById('conn-label').textContent = 'DISCONNECTED';
+      setTimeout(() => location.reload(), 2000);
+    };
+
+    ws.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+
+      if (d.type === 'frame') {
+        const feed = document.getElementById('cam-feed');
+        feed.src = 'data:image/jpeg;base64,' + d.data;
+        if (feed.style.display === 'none') {
+          feed.style.display = 'block';
+          document.getElementById('cam-pending').style.display = 'none';
+        }
+        document.getElementById('frame-num').textContent = 'FRAME: ' + String(d.count).padStart(5, '0');
+        document.getElementById('cam-mode').textContent = d.real ? 'LIVE' : 'SIM';
+      }
+
+      if (d.type === 'state') {
+        if (d.grip) currentGripAngle = d.grip;
+        updateState(d.state, d.object, d.grip, d.confidence);
+      }
+
+      if (d.type === 'detection') {
+        updateDetection(d.object, d.confidence, d.bbox);
+      }
+
+      if (d.type === 'serial') {
+        document.getElementById('serial-log').textContent = 'SERIAL > ' + d.log;
+      }
+
+      if (d.type === 'serial_rx') {
+        document.getElementById('serial-log').textContent = 'SERIAL > ' + d.msg;
+      }
+    };
+
+    function updateState(state, obj, grip, conf) {
+      currentState = state.toLowerCase();
+      const color = stateColors[currentState] || '#444';
+
+      document.getElementById('state-dot').style.background = color;
+      document.getElementById('state-name').style.color = color;
+      document.getElementById('state-name').textContent = state.toUpperCase();
+      document.getElementById('grip-value').textContent = grip + '°';
+      document.getElementById('grip-fill').style.background = color;
+      document.getElementById('grip-fill').style.width = (grip / 90 * 100) + '%';
+      document.getElementById('stick-state-label').textContent = state.toUpperCase();
+
+      // Update stick figure
+      updateStickman(currentState);
+
+      // Timeline
+      const idx = stateNames.indexOf(state.toUpperCase());
+      document.querySelectorAll('.timeline-step').forEach((el, i) => {
+        el.classList.remove('past', 'active', 'future');
+        if (i < idx) el.classList.add('past');
+        else if (i === idx) el.classList.add('active');
+        else el.classList.add('future');
+        if (i === idx) el.style.color = color;
+      });
+
+      // Pulse on gripping
+      document.getElementById('state-dot').classList.toggle('pulse', state === 'gripping');
+    }
+
+    function updateDetection(obj, conf, bbox) {
+      const objEl = document.getElementById('detected-object');
+      objEl.textContent = obj.toUpperCase();
+      objEl.classList.toggle('active', conf > 0);
+      document.getElementById('confidence-text').textContent = `CONF ${conf.toFixed(2)} / GRIP 60°`;
+    }
+
+    // ── STICK FIGURE SYSTEM ──────────────────────────────────────────
+
+    const STICK_PHRASES={
+      idle:["Gimme something to pick, human.","Scanning... I'm bored.","Human, present the tribute.","I crave objects.","Still waiting. Dramatically."],
+      detected:["TARGET ACQUIRED.","That looks grippable.","Ah, a fresh victim.","Object identified. Proceed."],
+      calculating:["Adjusting my tiny mechanical fingers...","Calculating optimum grip span.","Math is happening. Be patient.","Precision mode engaged."],
+      inserting:["Bring it closer... yes.","Center it properly, human.","Insert object for glorious gripping.","DO NOT YEET IT."],
+      gripping:["Bring it closer... yes.","Almost... hold steady.","Gripping in 3... 2... 1..."],
+      success:["NOM NOM. Object secured.","GOTCHA.","I continue to impress.","Another triumph. Obviously."],
+      fail:["That was NOT centered.","Grip failed. Kindly cooperate.","I said center it, not YEET it.","My dignity is at stake."],
+      longIdle:["zzzZZZ...","This is not a paid vacation.","My gears are getting cold.","*stares into the void*"]
+    };
+    const STICK_MOUTHS={
+      idle:"M 53,56 Q 60,60 67,56",
+      detected:"M 52,55 Q 60,63 68,55",
+      calculating:"M 54,58 Q 60,57 66,58",
+      inserting:"M 52,55 Q 60,62 68,55",
+      gripping:"M 52,55 Q 60,62 68,55",
+      success:"M 51,54 Q 60,65 69,54",
+      fail:"M 53,60 Q 60,55 67,60",
+      longIdle:"M 55,59 Q 60,58 65,59"
+    };
+    const STICK_EYES={
+      idle:        {rx:2.5,ry:3,  cy:46},
+      detected:    {rx:3,  ry:3.5,cy:45},
+      calculating: {rx:2.5,ry:2,  cy:46},
+      inserting:   {rx:3,  ry:3.5,cy:45},
+      gripping:    {rx:3,  ry:3.5,cy:45},
+      success:     {rx:2.5,ry:1.5,cy:47},
+      fail:        {rx:2.5,ry:1,  cy:47},
+      longIdle:    {rx:2.5,ry:1,  cy:47}
+    };
+    const STICK_COLORS={
+      idle:'#e8e4dc',detected:'#f5c518',calculating:'#4fc3f7',
+      inserting:'#ff9800',gripping:'#ff9800',success:'#1aff8c',
+      fail:'#ff4444',longIdle:'#555'
+    };
+
+    let stickT=0, stickAF=null, stickPI=0, stickPT=null, stickLIT=null;
+    const sguy=document.getElementById('guy');
+    const shead=document.getElementById('head-group');
+    const sarmL=document.getElementById('arm-l');
+    const sarmR=document.getElementById('arm-r');
+    const slegL=document.getElementById('leg-l');
+    const slegR=document.getElementById('leg-r');
+    const sshadow=document.getElementById('shadow');
+    const sphrase=document.getElementById('stick-phrase');
+    const seyeL=document.getElementById('eye-l');
+    const seyeR=document.getElementById('eye-r');
+    const smouth=document.getElementById('s-mouth');
+
+    function stickColor(s){
+      const c=STICK_COLORS[s]||'#e8e4dc';
+      document.querySelectorAll('#s-body,#arm-l line,#arm-r line,#leg-l line,#leg-r line').forEach(el=>el.setAttribute('stroke',c));
+      document.querySelector('#head-group circle').setAttribute('stroke',c);
+      seyeL.setAttribute('fill',c);
+      seyeR.setAttribute('fill',c);
+      smouth.setAttribute('stroke',c);
+    }
+
+    function stickFace(s){
+      smouth.setAttribute('d',STICK_MOUTHS[s]||STICK_MOUTHS.idle);
+      const e=STICK_EYES[s]||STICK_EYES.idle;
+      [seyeL,seyeR].forEach(el=>{
+        el.setAttribute('rx',e.rx);
+        el.setAttribute('ry',e.ry);
+        el.setAttribute('cy',e.cy);
+      });
+    }
+
+    function stopStick(){
+      if(stickAF) cancelAnimationFrame(stickAF);
+      stickAF=null;
+    }
+
+    function runStick(fn){
+      stopStick(); stickT=0;
+      const tick=()=>{stickT+=0.035;fn(stickT);stickAF=requestAnimationFrame(tick);};
+      stickAF=requestAnimationFrame(tick);
+    }
+
+    const STICK_ANIMS={
+      idle:(t)=>{
+        const b=Math.sin(t*0.9)*2.5;
+        sguy.style.transform=`translateY(${18+b}px)`;
+        slegR.style.transform=Math.sin(t*4)>0.6?'rotate(-18deg)':'rotate(-8deg)';
+        shead.style.transform=`rotate(${Math.sin(t*0.7)*4}deg)`;
+        sarmL.style.transform='rotate(25deg)';
+        sarmR.style.transform='rotate(-25deg)';
+        slegL.style.transform='rotate(15deg)';
+      },
+      detected:(t)=>{
+        const jmp=Math.abs(Math.sin(t*3.5))*-10;
+        sguy.style.transform=`translateY(${jmp}px)`;
+        sarmR.style.transform=`rotate(${-130+Math.sin(t*5)*10}deg)`;
+        sarmL.style.transform=`rotate(${20+Math.sin(t*5)*8}deg)`;
+        shead.style.transform=`rotate(${Math.sin(t*5)*7}deg)`;
+        slegL.style.transform=`rotate(${10+Math.abs(Math.sin(t*3.5))*10}deg)`;
+        slegR.style.transform=`rotate(${-10-Math.abs(Math.sin(t*3.5))*10}deg)`;
+      },
+      calculating:(t)=>{
+        const pace=Math.sin(t*1.1)*14;
+        sguy.style.transform=`translateY(0px) translateX(${pace}px)`;
+        sarmL.style.transform=`rotate(${-145+Math.sin(t*2.5)*12}deg)`;
+        sarmR.style.transform=`rotate(${-15+Math.sin(t*1.8)*8}deg)`;
+        shead.style.transform=`rotate(${Math.sin(t*1.1)*12}deg)`;
+        slegL.style.transform=`rotate(${Math.sin(t*1.1)*18}deg)`;
+        slegR.style.transform=`rotate(${-Math.sin(t*1.1)*18}deg)`;
+      },
+      inserting:(t)=>{
+        const beck=Math.sin(t*2)*18;
+        sarmL.style.transform=`rotate(${25+beck}deg)`;
+        sarmR.style.transform=`rotate(${-25-beck}deg)`;
+        sguy.style.transform=`translateY(0px) rotate(${Math.sin(t*2)*4}deg)`;
+        shead.style.transform=`rotate(${-Math.sin(t*2)*4}deg)`;
+        slegL.style.transform=`rotate(${15+Math.sin(t*2)*5}deg)`;
+        slegR.style.transform=`rotate(${-15-Math.sin(t*2)*5}deg)`;
+      },
+      gripping:(t)=>{
+        const beck=Math.sin(t*2)*18;
+        sarmL.style.transform=`rotate(${25+beck}deg)`;
+        sarmR.style.transform=`rotate(${-25-beck}deg)`;
+        sguy.style.transform=`translateY(0px) rotate(${Math.sin(t*2)*4}deg)`;
+        shead.style.transform=`rotate(${-Math.sin(t*2)*4}deg)`;
+        slegL.style.transform=`rotate(${15+Math.sin(t*2)*5}deg)`;
+        slegR.style.transform=`rotate(${-15-Math.sin(t*2)*5}deg)`;
+      },
+      success:(t)=>{
+        if(t<1.8){
+          const flip=t/1.8*360;
+          const arc=Math.sin(t/1.8*Math.PI)*-35;
+          sguy.style.transform=`translateY(${arc}px) rotate(${flip}deg)`;
+          sshadow.setAttribute('rx',String(18-Math.abs(arc)*0.3));
+        } else {
+          const d=t-1.8;
+          const bounce=Math.abs(Math.sin(d*4))*-8;
+          sguy.style.transform=`translateY(${bounce}px)`;
+          sarmL.style.transform=`rotate(${-150+Math.sin(d*4)*15}deg)`;
+          sarmR.style.transform=`rotate(${150-Math.sin(d*4)*15}deg)`;
+          shead.style.transform=`rotate(${Math.sin(d*4)*10}deg)`;
+        }
+      },
+      fail:(t)=>{
+        if(t<1.2){
+          const fall=Math.min(t/1.2,1);
+          sguy.style.transform=`translateY(${fall*30}px) rotate(${fall*88}deg)`;
+          sshadow.setAttribute('rx',String(14+fall*18));
+        } else {
+          sguy.style.transform=`translateY(30px) rotate(88deg)`;
+          const tw=Math.sin(t*0.4)>0.85?`translateY(${Math.sin(t*10)*3}px)`:'translateY(0)';
+          shead.style.transform=tw;
+          sshadow.setAttribute('rx','32');
+        }
+      },
+      longIdle:(t)=>{
+        if(t<1.5){
+          const f=Math.min(t/1.5,1);
+          sguy.style.transform=`translateY(${f*22}px) rotate(${f*90}deg)`;
+          sshadow.setAttribute('rx',String(14+f*18));
+        } else {
+          const d=t-1.5;
+          sguy.style.transform=`translateY(22px) rotate(90deg)`;
+          slegL.style.transform=`rotate(${-55+Math.sin(d*1.8)*22}deg)`;
+          slegR.style.transform=`rotate(${-75+Math.sin(d*1.8+1)*22}deg)`;
+          sarmL.style.transform=`rotate(${55+Math.sin(d*0.9)*12}deg)`;
+          sarmR.style.transform=`rotate(${-55-Math.sin(d*0.9)*12}deg)`;
+          sshadow.setAttribute('rx','32');
+        }
+      }
+    };
+
+    function updateStickman(s){
+      stickPI=0;
+      stopStick();
+      [sguy,shead,sarmL,sarmR,slegL,slegR].forEach(el=>{
+        el.style.transition='transform 0.25s ease';
+      });
+      setTimeout(()=>{
+        [sguy,shead,sarmL,sarmR,slegL,slegR].forEach(el=>el.style.transition='');
+      },260);
+      sguy.style.transform='translateY(0px)';
+      shead.style.transform=''; sarmL.style.transform='';
+      sarmR.style.transform=''; slegL.style.transform='';
+      slegR.style.transform=''; sshadow.setAttribute('rx','18');
+      stickFace(s); stickColor(s);
+      setTimeout(()=>{ if(STICK_ANIMS[s]) runStick(STICK_ANIMS[s]); },260);
+      showStickPhrase(s);
+      clearInterval(stickPT);
+      stickPT=setInterval(()=>{
+        stickPI=(stickPI+1)%(STICK_PHRASES[s]||STICK_PHRASES.idle).length;
+        showStickPhrase(s);
+      },4200);
+      clearTimeout(stickLIT);
+      if(s==='idle') stickLIT=setTimeout(()=>updateStickman('longIdle'),20000);
+    }
+
+    function showStickPhrase(s){
+      sphrase.style.opacity='0';
+      setTimeout(()=>{
+        sphrase.textContent=(STICK_PHRASES[s]||STICK_PHRASES.idle)[stickPI];
+        sphrase.style.opacity='1';
+      },200);
+    }
+
+    // Build timeline
+    function buildTimeline() {
+      const timeline = document.getElementById('timeline');
+      stateNames.forEach(name => {
+        const step = document.createElement('div');
+        step.className = 'timeline-step future';
+        step.innerHTML = `<div class="timeline-dot"></div><div class="timeline-label">${name}</div>`;
+        timeline.appendChild(step);
+      });
+    }
+
+    buildTimeline();
+
+    // ── Button helpers ────────────────────────────────────────────────
+    function pushSerialLog(msg) {
+      document.getElementById('serial-log').textContent = 'SERIAL > ' + msg;
+    }
+
+    function flashButton(btn) {
+      btn.style.color = '#1aff8c';
+      btn.style.borderBottomColor = '#1aff8c';
+      setTimeout(() => {
+        btn.style.color = '';
+        btn.style.borderBottomColor = '';
+      }, 400);
+    }
+
+    // ── Buttons ───────────────────────────────────────────────────────
+    document.getElementById('btn-open').onclick = function() {
+      ws.send(JSON.stringify({type:'cmd', cmd:'open'}));
+      pushSerialLog('TX > OPEN');
+      flashButton(this);
+    };
+
+    document.getElementById('btn-close').onclick = function() {
+      ws.send(JSON.stringify({type:'cmd', cmd:'close'}));
+      pushSerialLog('TX > CLOSE:' + currentGripAngle);
+      flashButton(this);
+    };
+
+    document.getElementById('btn-grip').onclick = function() {
+      ws.send(JSON.stringify({type:'cmd', cmd:'grip'}));
+      pushSerialLog('TX > GRIP');
+      flashButton(this);
+    };
+
+    document.getElementById('btn-reset').onclick = function() {
+      ws.send(JSON.stringify({type:'cmd', cmd:'reset'}));
+      pushSerialLog('TX > RESET');
+      flashButton(this);
+    };
+
+    document.getElementById('btn-estop').onclick = function() {
+      ws.send(JSON.stringify({type:'cmd', cmd:'estop'}));
+      pushSerialLog('TX > EMERGENCY STOP');
+      const btn = this;
+      btn.style.background = 'rgba(255,68,68,0.2)';
+      setTimeout(() => { btn.style.background = ''; }, 400);
+    };
+
+    // Init idle state on load
+    updateStickman('idle');
+  </script>
+</body>
+</html>

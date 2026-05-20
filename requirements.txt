@@ -1,0 +1,6 @@
+ultralytics
+opencv-python
+pyserial
+pywebview>=4.4
+websockets>=12.0
+Pillow

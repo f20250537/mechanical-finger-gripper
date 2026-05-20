@@ -2,6 +2,15 @@
 
 Vision-assisted 2-finger robotic gripper control app — BITS Pilani Dubai, Spring 2026.
 
+## Team
+
+| Name | ID |
+|------|----|
+| Pranav Gadde | 2025ACPS0549U |
+| Shrujan Ravi Gowda | 2025ACPS0544U |
+| Bharath Kshathriya | 2025ACPS0552U |
+| Karthik Pamarthi | 2025ACPS0537U |
+
 Python handles webcam vision, YOLOv8 object detection, Arduino serial communication, and a state machine that drives the full grip cycle. The desktop UI runs inside a `pywebview` window served from `app.html`.
 
 The app is fully demoable without hardware. If no Arduino is found, it enters **simulated mode** — all serial commands are echoed in the log, the servo angle is tracked virtually, and the full state machine runs normally.
